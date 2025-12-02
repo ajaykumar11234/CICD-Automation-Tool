@@ -32,6 +32,10 @@ dist/
 # Environment variables
 .env
 
+# Secrets and sensitive files
+replace.txt
+*.secret
+
 # OS
 .DS_Store
 Thumbs.db
