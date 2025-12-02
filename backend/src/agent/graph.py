@@ -8,7 +8,7 @@
 # class MonitoringAgent:
 #     """Agent to monitor GitHub workflow health, analyze failures, and auto-fix if possible."""
 
-#     def __init__(self):
+#     def _init_(self):
 #         self.tools = GitHubTools()
 #         self.llm = LLMClient()
 #         self.graph = self._build_graph()
@@ -145,9 +145,9 @@
 
 #         body = f"""## Workflow Failure Analysis
 
-# **Root Cause:** {state.get('analysis', {}).get('root_cause', 'Unknown')}
-# **Error Message:** {state.get('analysis', {}).get('error_message', 'Unknown')}
-# **Failed Run ID:** {state.get('failed_run_id', 'Unknown')}
+# *Root Cause:* {state.get('analysis', {}).get('root_cause', 'Unknown')}
+# *Error Message:* {state.get('analysis', {}).get('error_message', 'Unknown')}
+# *Failed Run ID:* {state.get('failed_run_id', 'Unknown')}
 
 # ### Logs Snippet:
 
@@ -155,7 +155,7 @@
 # ### Analysis:
 # The automated agent determined this issue is not automatically fixable.
 
-# **Suggested Action:** {state.get('analysis', {}).get('fix_suggestion', 'Manual intervention required.')}"""
+# *Suggested Action:* {state.get('analysis', {}).get('fix_suggestion', 'Manual intervention required.')}"""
 
 #         issue_url = self.tools.create_github_issue(
 #             state["owner"],
@@ -216,7 +216,7 @@
 #             "fix_applied": False
 #         }
 
-#         print(f"*********Starting monitoring agent for {repo_url}**********************")
+#         print(f"Starting monitoring agent for {repo_url}*")
 
 #         try:
 #             final_state = self.graph.invoke(initial_state)
@@ -255,7 +255,6 @@ logger = logging.getLogger(__name__)
 
 class MonitoringAgent:
     """Agent to monitor GitHub workflow health, analyze failures, and auto-fix if possible."""
-
     def __init__(self):
         self.tools = GitHubTools()
         self.llm = LLMClient()
@@ -321,16 +320,45 @@ class MonitoringAgent:
         return state
 
     def fetch_logs(self, state: AgentState) -> AgentState:
-        if state.get("failed_job_id"):
-            logger.info(f"Fetching logs for job {state['failed_job_id']}")
-            logs = self.tools.fetch_failure_logs(
-                state["owner"],
-                state["repo_name"],
-                state["failed_job_id"]
-            )
-            state["raw_logs"] = logs
-            logger.info(f"Retrieved {len(logs) if logs else 0} characters of logs")
-        return state
+            if state.get("failed_job_id"):
+                logger.info(f"Fetching logs for job {state['failed_job_id']}")
+                
+                # 1. Fetch the full raw logs
+                full_logs = self.tools.fetch_failure_logs(
+                    state["owner"],
+                    state["repo_name"],
+                    state["failed_job_id"]
+                )
+                
+                # 2. Filter for the latest logs (Fix for Context Limit Exceeded)
+                # Keeping last 20,000 characters is usually enough for ~5-6k tokens
+                # and covers the last few minutes of the build where the error occurred.
+                filtered_logs = self._get_log_tail(full_logs, max_chars=10000)
+
+                state["raw_logs"] = filtered_logs
+                
+                logger.info(f"Original log size: {len(full_logs)}. Processed log size: {len(filtered_logs)}")
+            return state
+
+    def _get_log_tail(self, logs: str, max_chars: int) -> str:
+        """
+        Helper to get the end of the log to fit in LLM context.
+        If logs are shorter than max_chars, returns the whole thing.
+        """
+        if not logs:
+            return ""
+            
+        if len(logs) <= max_chars:
+            return logs
+            
+        # Slice the last N characters
+        tail = logs[-max_chars:]
+        
+        # Optional: clean up the first line if it was cut in the middle
+        if "\n" in tail:
+            tail = tail.split("\n", 1)[1]
+            
+        return f"...(older logs truncated)...\n{tail}"
 
     def analyze_failure(self, state: AgentState) -> AgentState:
         if state.get("raw_logs"):
@@ -385,9 +413,9 @@ class MonitoringAgent:
 
         body = f"""## Workflow Failure Analysis
 
-**Root Cause:** {state.get('analysis', {}).get('root_cause', 'Unknown')}
-**Error Message:** {state.get('analysis', {}).get('error_message', 'Unknown')}
-**Failed Run ID:** {state.get('failed_run_id', 'Unknown')}
+*Root Cause:* {state.get('analysis', {}).get('root_cause', 'Unknown')}
+*Error Message:* {state.get('analysis', {}).get('error_message', 'Unknown')}
+*Failed Run ID:* {state.get('failed_run_id', 'Unknown')}
 
 ### Logs Snippet:
 
@@ -395,7 +423,7 @@ class MonitoringAgent:
 ### Analysis:
 The automated agent determined this issue is not automatically fixable.
 
-**Suggested Action:** {state.get('analysis', {}).get('fix_suggestion', 'Manual intervention required.')}"""
+*Suggested Action:* {state.get('analysis', {}).get('fix_suggestion', 'Manual intervention required.')}"""
 
         issue_url = self.tools.create_github_issue(
             state["owner"],

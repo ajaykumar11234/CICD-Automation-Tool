@@ -64,7 +64,7 @@ class GitHubTools:
                             print(f"✅ Found recent successful run: {run['id']}")
                             return {"status": "success"}
                         else:
-                            print(f"⚠️ Recent run {run['id']} has conclusion: {run['conclusion']}")
+                            print(f"⚠ Recent run {run['id']} has conclusion: {run['conclusion']}")
                             continue
             
             print("No recent runs found, checking older runs for overall health...")

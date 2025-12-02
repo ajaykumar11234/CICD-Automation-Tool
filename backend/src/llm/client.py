@@ -7,12 +7,9 @@ from langchain_core.prompts import ChatPromptTemplate
 
 class LLMClient:
     def __init__(self):
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise ValueError("❌ GROQ_API_KEY not found. Set it in environment or .env file.")
-
+        groq_api_key = os.getenv("GROQ_API_KEY")
         self.client = ChatGroq(
-            groq_api_key=api_key,
+            groq_api_key=groq_api_key,
             model_name="openai/gpt-oss-20b"
         )
     
@@ -29,14 +26,14 @@ class LLMClient:
         Determine the root cause of the failure. Common causes include: syntax errors in the YAML, 
         package manager failures, version mismatches (e.g., Node.js, Python), or build/test failures. 
         Respond with a JSON object with the following structure: 
-        {
+        {{
             "root_cause": "description of the root cause",
             "error_message": "the specific error message", 
             "is_fixable": true/false,
             "fix_suggestion": "suggestion for how to fix it"
-        }
+        }}
         The is_fixable flag should only be true if the error is a clear version mismatch or a simple syntax error in the workflow file itself."""
-
+        
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", "Logs:\n{logs}")
@@ -59,10 +56,11 @@ class LLMClient:
                 "is_fixable": False,
                 "fix_suggestion": "Manual analysis required"
             }
-    
+        
     def generate_fix(self, original_content: str, fix_suggestion: str) -> str:
-        system_prompt = """Given the following workflow file and the required fix, please generate the entire new, corrected workflow YAML file. 
-        Only output the new YAML file content. Do not include any explanations or markdown formatting."""
+        system_prompt = """Given the following workflow file and the required fix, 
+        generate the corrected workflow YAML file.
+        Output only the YAML. No explanations, no markdown."""
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -74,11 +72,11 @@ class LLMClient:
             "original_content": original_content,
             "fix_suggestion": fix_suggestion
         })
-        
+
         content = response.content.strip()
-        if "```yaml" in content:
-            content = content.split("```yaml")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-        
+
+        # Remove accidental markdown code fences
+        content = re.sub(r"```(yaml|yml)?", "", content)
+        content = content.replace("```", "").strip()
+
         return content
