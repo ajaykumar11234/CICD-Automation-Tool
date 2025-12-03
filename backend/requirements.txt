@@ -9,6 +9,7 @@ requests
 PyYAML
 fastapi
 uvicorn
+gunicorn
 pymongo
 motor
 pydantic
